@@ -1,9 +1,18 @@
 import { createMemo, getOwner, runWithOwner } from "solid-js";
-import type { MatchFilter, MatchFilters, Params, PathMatch, RouteDescription, SetParams } from "./types.ts";
+import type {
+  MatchFilter,
+  MatchFilters,
+  Params,
+  PathMatch,
+  RouteDescription,
+  SearchParams,
+  SetParams,
+  SetSearchParams
+} from "./types.ts";
 
 const hasSchemeRegex = /^(?:[a-z0-9]+:)?\/\//i;
 const trimPathRegex = /^\/+|(\/)\/+$/g;
-export const mockBase = "http://sr"
+export const mockBase = "http://sr";
 
 export function normalizePath(path: string, omitSlash: boolean = false) {
   const s = path.replace(trimPathRegex, "$1");
@@ -38,10 +47,13 @@ export function joinPaths(from: string, to: string): string {
   return normalizePath(from).replace(/\/*(\*.*)?$/g, "") + normalizePath(to);
 }
 
-export function extractSearchParams(url: URL): Params {
-  const params: Params = {};
+export function extractSearchParams(url: URL): SearchParams {
+  const params: SearchParams = {};
   url.searchParams.forEach((value, key) => {
-    params[key] = value;
+    if (key in params) {
+      if (Array.isArray(params[key])) (params[key] as string[]).push(value);
+      else params[key] = [params[key] as string, value];
+    } else params[key] = value;
   });
   return params;
 }
@@ -72,13 +84,13 @@ export function createMatcher<S extends string>(
 
     for (let i = 0; i < len; i++) {
       const segment = segments[i];
-      const locSegment = locSegments[i];
       const dynamic = segment[0] === ":";
-      const key = dynamic ? segment.slice(1) : segment;
+      const locSegment = dynamic ? locSegments[i] : locSegments[i].toLowerCase();
+      const key = dynamic ? segment.slice(1) : segment.toLowerCase();
 
       if (dynamic && matchSegment(locSegment, matchFilter(key))) {
         match.params[key] = locSegment;
-      } else if (dynamic || !matchSegment(locSegment, segment)) {
+      } else if (dynamic || !matchSegment(locSegment, key)) {
         return null;
       }
       match.path += `/${locSegment}`;
@@ -98,7 +110,7 @@ export function createMatcher<S extends string>(
 }
 
 function matchSegment(input: string, filter?: string | MatchFilter): boolean {
-  const isEqual = (s: string) => s.localeCompare(input, undefined, { sensitivity: "base" }) === 0;
+  const isEqual = (s: string) => s === input;
 
   if (filter === undefined) {
     return true;
@@ -150,13 +162,21 @@ export function createMemoObject<T extends Record<string | symbol, unknown>>(fn:
   });
 }
 
-export function mergeSearchString(search: string, params: SetParams) {
+export function mergeSearchString(search: string, params: SetSearchParams) {
   const merged = new URLSearchParams(search);
   Object.entries(params).forEach(([key, value]) => {
-    if (value == null || value === "") {
+    if (value == null || value === "" || (value instanceof Array && !value.length)) {
       merged.delete(key);
     } else {
-      merged.set(key, String(value));
+      if (value instanceof Array) {
+        // Delete all instances of the key before appending
+        merged.delete(key);
+        value.forEach(v => {
+          merged.append(key, String(v));
+        });
+      } else {
+        merged.set(key, String(value));
+      }
     }
   });
   const s = merged.toString();

@@ -1,5 +1,76 @@
 # @solidjs/router
 
+## 0.15.0
+
+### Minor Changes
+
+- 6799556: rename `cache` to `query`, action `onComplete`
+
+## 0.14.10
+
+### Patch Changes
+
+- 18b9b52: Support arrays in Search Params
+- 272218f: fix #491 - useSubmission with "with" actions
+
+## 0.14.9
+
+### Patch Changes
+
+- a22d7d2: fix preloadRoute to take string path
+- 6dd0473: support empty array/string to mean no revalidation
+
+## 0.14.8
+
+### Patch Changes
+
+- a3a36fb: Add query and param wrappers to support non-Proxy envs
+- 2475851: bump deps
+- 2f1fa18: improve anchor preload performance
+
+## 0.14.7
+
+### Patch Changes
+
+- 3594e45: fix iterator methods on useSubmissions
+
+## 0.14.6
+
+### Patch Changes
+
+- 0a964b6: Fix duplicated push history
+- c61231d: Fix scrollToHash to handle hashes starting with a number
+- 83b7093: remove extra code, fix #406 slow perf on localeCompare
+
+## 0.14.5
+
+### Patch Changes
+
+- 5c87acc: fix partial matches in single flight mutations
+
+## 0.14.4
+
+### Patch Changes
+
+- 098dccb: fix #474 improper search parameter resolution while routing
+- f8f30df: fix initial state including \_depth
+
+## 0.14.3
+
+### Patch Changes
+
+- 19a21cc: fix async store references
+- f8aaf16: make url transform consistent
+- 86c3b1f: better handling of query only navigation
+
+## 0.14.2
+
+### Patch Changes
+
+- bc3d8e3: expose .latest from createAsync
+- fc6ac53: fix #464 flaky hydration bail out
+- 3295502: fix hydration cancellation on browser events
+
 ## 0.14.1
 
 ### Patch Changes

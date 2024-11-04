@@ -1,4 +1,4 @@
-import { Signal, createSignal, onCleanup } from "solid-js";
+import { type Signal, createSignal, onCleanup, sharedConfig } from "solid-js";
 import type { LocationChange, RouterContext, RouterUtils } from "../types.ts";
 import { createRouterComponent } from "./components.jsx";
 
@@ -8,18 +8,6 @@ function intercept<T>(
   set?: (v: T) => T
 ): [() => T, (v: T) => void] {
   return [get ? () => get(value()) : value, set ? (v: T) => setValue(set(v)) : setValue];
-}
-
-function querySelector<T extends Element>(selector: string) {
-  if (selector === "#") {
-    return null;
-  }
-  // Guard against selector being an invalid CSS selector
-  try {
-    return document.querySelector<T>(selector);
-  } catch (e) {
-    return null;
-  }
 }
 
 export function createRouter(config: {
@@ -38,6 +26,7 @@ export function createRouter(config: {
     undefined,
     next => {
       !ignore && config.set(next);
+      if (sharedConfig.registry && !sharedConfig.done) sharedConfig.done = true;
       return next;
     }
   ) as Signal<LocationChange>;
@@ -64,7 +53,7 @@ export function bindEvent(target: EventTarget, type: string, handler: EventListe
 }
 
 export function scrollToHash(hash: string, fallbackTop?: boolean) {
-  const el = querySelector(`#${hash}`);
+  const el = hash && document.getElementById(hash);
   if (el) {
     el.scrollIntoView();
   } else if (fallbackTop) {

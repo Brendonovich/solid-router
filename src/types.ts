@@ -24,8 +24,16 @@ declare module "solid-js/web" {
 }
 
 export type Params = Record<string, string>;
+export type SearchParams = Record<string, string | string[]>;
 
-export type SetParams = Record<string, string | number | boolean | null | undefined>;
+export type SetParams = Record<
+  string,
+  string | number | boolean | null | undefined
+>;
+export type SetSearchParams = Record<
+  string,
+  string | string[] | number | number[] | boolean | boolean[] | null | undefined
+>;
 
 export interface Path {
   pathname: string;
@@ -34,7 +42,7 @@ export interface Path {
 }
 
 export interface Location<S = unknown> extends Path {
-  query: Params;
+  query: SearchParams;
   state: Readonly<Partial<S>> | null;
   key: string;
 }
@@ -58,6 +66,7 @@ export interface LocationChange<S = unknown> {
   replace?: boolean;
   scroll?: boolean;
   state?: S;
+  rawPath?: string;
 }
 export interface RouterIntegration {
   signal: Signal<LocationChange>;
@@ -170,6 +179,8 @@ export interface RouterUtils {
   parsePath(str: string): string;
   go(delta: number): void;
   beforeLeave: BeforeLeaveLifecycle;
+  paramsWrapper: (getParams: () => Params, branches: () => Branch[]) => Params;
+  queryWrapper: (getQuery: () => SearchParams) => SearchParams;
 }
 
 export interface RouterContext {
@@ -182,7 +193,7 @@ export interface RouterContext {
   renderPath(path: string): string;
   parsePath(str: string): string;
   beforeLeave: BeforeLeaveLifecycle;
-  preloadRoute: (url: URL, options: { preloadData?: boolean }) => void;
+  preloadRoute: (url: URL, preloadData?: boolean) => void;
   singleFlight: boolean;
   submissions: Signal<Submission<any, any>[]>;
 }
@@ -231,7 +242,7 @@ export interface MaybePreloadableComponent extends Component {
   preload?: () => void;
 }
 
-export type CacheEntry = [number, any, Intent | undefined, Signal<number> & { count: number }];
+export type CacheEntry = [number, Promise<any>, any, Intent | undefined, Signal<number> & { count: number }];
 
 export type NarrowResponse<T> = T extends CustomResponse<infer U> ? U : Exclude<T, Response>;
 export type RouterResponseInit = Omit<ResponseInit, "body"> & { revalidate?: string | string[] };

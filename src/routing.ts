@@ -32,7 +32,9 @@ import type {
   RouterContext,
   RouterIntegration,
   SetParams,
-  Submission
+  Submission,
+  SearchParams,
+  SetSearchParams
 } from "./types.js";
 import {
   mockBase,
@@ -77,7 +79,11 @@ export const useHref = (to: () => string | undefined) => {
 export const useNavigate = () => useRouter().navigatorFactory();
 export const useLocation = <S = unknown>() => useRouter().location as Location<S>;
 export const useIsRouting = () => useRouter().isRouting;
-export const usePreloadRoute = () => useRouter().preloadRoute;
+export const usePreloadRoute = () => {
+  const pre = useRouter().preloadRoute;
+  return (url: string | URL, options: { preloadData?: boolean } = {}) =>
+    pre(url instanceof URL ? url : new URL(url, mockBase), options.preloadData);
+};
 
 export const useMatch = <S extends string>(path: () => S, matchFilters?: MatchFilters<S>) => {
   const location = useLocation();
@@ -96,16 +102,14 @@ export const useCurrentMatches = () => useRouter().matches;
 
 export const useParams = <T extends Params>() => useRouter().params as T;
 
-export const useSearchParams = <T extends Params>(): [
+export const useSearchParams = <T extends SearchParams>(): [
   Partial<T>,
-  (params: SetParams, options?: Partial<NavigateOptions>) => void
+  (params: SetSearchParams, options?: Partial<NavigateOptions>) => void
 ] => {
   const location = useLocation();
   const navigate = useNavigate();
-  const setSearchParams = (params: SetParams, options?: Partial<NavigateOptions>) => {
-    const searchString = untrack(
-      () => location.pathname + mergeSearchString(location.search, params) + location.hash
-    );
+  const setSearchParams = (params: SetSearchParams, options?: Partial<NavigateOptions>) => {
+    const searchString = untrack(() => mergeSearchString(location.search, params) + location.hash);
     navigate(searchString, {
       scroll: false,
       resolve: false,
@@ -242,7 +246,11 @@ export function getRouteMatches(branches: Branch[], location: string): RouteMatc
   return [];
 }
 
-export function createLocation(path: Accessor<string>, state: Accessor<any>): Location {
+function createLocation(
+  path: Accessor<string>,
+  state: Accessor<any>,
+  queryWrapper?: (getQuery: () => SearchParams) => SearchParams
+): Location {
   const origin = new URL(mockBase);
   const url = createMemo<URL>(
     prev => {
@@ -264,6 +272,7 @@ export function createLocation(path: Accessor<string>, state: Accessor<any>): Lo
   const search = createMemo(() => url().search, true);
   const hash = createMemo(() => url().hash);
   const key = () => "";
+  const queryFn = on(search, () => extractSearchParams(url())) as () => SearchParams;
 
   return {
     get pathname() {
@@ -281,7 +290,7 @@ export function createLocation(path: Accessor<string>, state: Accessor<any>): Lo
     get key() {
       return key();
     },
-    query: createMemoObject(on(search, () => extractSearchParams(url())) as () => Params)
+    query: queryWrapper ? queryWrapper(queryFn) : createMemoObject(queryFn)
   };
 }
 
@@ -355,7 +364,7 @@ export function createRouterContext(
   };
   const [reference, setReference] = createSignal(source().value);
   const [state, setState] = createSignal(source().state);
-  const location = createLocation(reference, state);
+  const location = createLocation(reference, state, utils.queryWrapper);
   const referrers: LocationChange[] = [];
   const submissions = createSignal<Submission<any, any>[]>(isServer ? initFromFlash() : []);
 
@@ -367,14 +376,18 @@ export function createRouterContext(
     return getRouteMatches(branches(), location.pathname);
   });
 
-  const params = createMemoObject(() => {
+  const buildParams = () => {
     const m = matches();
     const params: Params = {};
     for (let i = 0; i < m.length; i++) {
       Object.assign(params, m[i].params);
     }
     return params;
-  });
+  };
+
+  const params = utils.paramsWrapper
+    ? utils.paramsWrapper(buildParams, branches)
+    : createMemoObject(buildParams);
 
   const baseRoute: RouteContext = {
     pattern: basePath,
@@ -421,6 +434,7 @@ export function createRouterContext(
         return;
       }
 
+      const queryOnly = !to || to[0] === "?";
       const {
         replace,
         resolve,
@@ -428,12 +442,14 @@ export function createRouterContext(
         state: nextState
       } = {
         replace: false,
-        resolve: true,
+        resolve: !queryOnly,
         scroll: true,
         ...options
       };
 
-      const resolvedTo = resolve ? route.resolvePath(to) : resolvePath("", to);
+      const resolvedTo = resolve
+        ? route.resolvePath(to)
+        : resolvePath((queryOnly && location.pathname) || "", to);
 
       if (resolvedTo === undefined) {
         throw new Error(`Path '${to}' is not a routable path`);
@@ -478,7 +494,7 @@ export function createRouterContext(
     }
   }
 
-  function preloadRoute(url: URL, options: { preloadData?: boolean } = {}) {
+  function preloadRoute(url: URL, preloadData?: boolean) {
     const matches = getRouteMatches(branches(), url.pathname);
     const prevIntent = intent;
     intent = "preload";
@@ -489,7 +505,7 @@ export function createRouterContext(
         (route.component as MaybePreloadableComponent).preload!();
       const { preload } = route;
       inPreloadFn = true;
-      options.preloadData &&
+      preloadData &&
         preload &&
         runWithOwner(getContext!(), () =>
           preload({

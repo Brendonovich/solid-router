@@ -427,30 +427,30 @@ The return value of the `preload` function is passed to the page component when 
 
 Keep in mind these are completely optional. To use but showcase the power of our preload mechanism.
 
-### `cache`
+### `query`
 
-To prevent duplicate fetching and to trigger handle refetching we provide a cache api. That takes a function and returns the same function.
+To prevent duplicate fetching and to trigger handle refetching we provide a query api. That takes a function and returns the same function.
 
 ```jsx
-const getUser = cache(async (id) => {
+const getUser = query(async (id) => {
   return (await fetch(`/api/users${id}`)).json()
-}, "users") // used as cache key + serialized arguments
+}, "users") // used as the query key + serialized arguments
 ```
-It is expected that the arguments to the cache function are serializable.
+It is expected that the arguments to the query function are serializable.
 
-This cache accomplishes the following:
+This query accomplishes the following:
 
-1. It does just deduping on the server for the lifetime of the request.
-2. It does preload cache in the browser which lasts 5 seconds. When a route is preloaded on hover or when preload is called when entering a route it will make sure to dedupe calls.
+1. It does deduping on the server for the lifetime of the request.
+2. It fills a preload cache in the browser which lasts 5 seconds. When a route is preloaded on hover or when preload is called when entering a route it will make sure to dedupe calls.
 3. We have a reactive refetch mechanism based on key. So we can tell routes that aren't new to retrigger on action revalidation.
-4. It will serve as a back/forward cache for browser navigation up to 5 mins. Any user based navigation or link click bypasses it. Revalidation or new fetch updates the cache.
+4. It will serve as a back/forward cache for browser navigation up to 5 mins. Any user based navigation or link click bypasses this cache. Revalidation or new fetch updates the cache.
 
 Using it with preload function might look like:
 
 ```js
 import { lazy } from "solid-js";
 import { Route } from "@solidjs/router";
-import { getUser } from ... // the cache function
+import { getUser } from ... // the query function
 
 const User = lazy(() => import("./pages/users/[id].js"));
 
@@ -467,7 +467,7 @@ Inside your page component you:
 
 ```jsx
 // pages/users/[id].js
-import { getUser } from ... // the cache function
+import { getUser } from ... // the query function
 
 export default function User(props) {
   const user = createAsync(() => getUser(props.params.id));
@@ -483,9 +483,9 @@ getUser.key // returns "users"
 getUser.keyFor(id) // returns "users[5]"
 ```
 
-You can revalidate the cache using the `revalidate` method or you can set `revalidate` keys on your response from your actions. If you pass the whole key it will invalidate all the entries for the cache (ie "users" in the example above). You can also invalidate a single entry by using `keyFor`.
+You can revalidate the query using the `revalidate` method or you can set `revalidate` keys on your response from your actions. If you pass the whole key it will invalidate all the entries for the query (ie "users" in the example above). You can also invalidate a single entry by using `keyFor`.
 
-`cache` can be defined anywhere and then used inside your components with:
+`query` can be defined anywhere and then used inside your components with:
 
 ### `createAsync`
 
@@ -495,11 +495,19 @@ This is light wrapper over `createResource` that aims to serve as stand-in for a
 const user = createAsync((currentValue) => getUser(params.id))
 ```
 
-Using `cache` in `createResource` directly won't work properly as the fetcher is not reactive and it won't invalidate properly.
+It also preserves `latest` field from `createResource`. Note that it will be removed in the future.
+
+```jsx
+const user = createAsync((currentValue) => getUser(params.id))
+return <h1>{user.latest.name}</h1>;
+```
+
+Using `query` in `createResource` directly won't work properly as the fetcher is not reactive and it won't invalidate properly.
 
 ### `createAsyncStore`
 
 Similar to `createAsync` except it uses a deeply reactive store. Perfect for applying fine-grained changes to large model data that updates.
+It also supports `latest` field which will be removed in the future.
 
 ```jsx
 const todos = createAsyncStore(() => getTodos());
@@ -550,7 +558,9 @@ const deleteUser = action(api.deleteTodo)
 </form>
 ```
 
-#### Notes of `<form>` implementation and SSR
+Actions also a second argument which can be the name or an option object with `name` and `onComplete`. `name` is used to identify SSR actions that aren't server functions (see note below). `onComplete` allows you to configure behavior when `action`s complete. Keep in mind `onComplete` does not work when JavaScript is disabled.
+
+#### Notes on `<form>` implementation and SSR
 This requires stable references as you can only serialize a string as an attribute, and across SSR they'd need to match. The solution is providing a unique name.
 
 ```jsx
@@ -589,13 +599,13 @@ const submission = useSubmission(action, (input) => filter(input));
 
 ### Response Helpers
 
-These are used to communicate router navigations from cache/actions, and can include invalidation hints. Generally these are thrown to not interfere the with the types and make it clear that function ends execution at that point.
+These are used to communicate router navigations from query/actions, and can include invalidation hints. Generally these are thrown to not interfere the with the types and make it clear that function ends execution at that point.
 
 #### `redirect(path, options)`
 
 Redirects to the next route
 ```js
-const getUser = cache(() => {
+const getUser = query(() => {
   const user = await api.getCurrentUser()
   if (!user) throw redirect("/login");
   return user;
@@ -606,7 +616,7 @@ const getUser = cache(() => {
 
 Reloads the data on the current page
 ```js
-const getTodo = cache(async (id: number) => {
+const getTodo = query(async (id: number) => {
   const todo = await fetchTodo(id);
   return todo;
 }, "todo")
@@ -727,7 +737,7 @@ This is the main Router component for the browser.
 | base | string | Base url to use for matching routes |
 | actionBase | string | Root url for server actions, default: `/_server` |
 | preload | boolean | Enables/disables preloads globally, default: `true` |
-| explicitLinks | boolean | Disables all anchors being intercepted and instead requires `<A>`. default: `false` |
+| explicitLinks | boolean | Disables all anchors being intercepted and instead requires `<A>`. Default: `false`. (To disable interception for a specific link, set `target` to any value, e.g. `<a target="_self">`.) |
 
 ### `<A>`
 
@@ -848,7 +858,7 @@ const isRouting = useIsRouting();
 
 return (
   <div classList={{ "grey-out": isRouting() }}>
-    <MyAwesomeConent />
+    <MyAwesomeContent />
   </div>
 );
 ```
@@ -929,7 +939,7 @@ Related without Outlet component it has to be passed in manually. At which point
 
 ### `data` functions & `useRouteData`
 
-These have been replaced by a preload mechanism. This  allows link hover preloads (as the preload function can be run as much as wanted without worry about reactivity). It support deduping/cache APIs which give more control over how things are cached. It also addresses TS issues with getting the right types in the Component without `typeof` checks.
+These have been replaced by a preload mechanism. This  allows link hover preloads (as the preload function can be run as much as wanted without worry about reactivity). It support deduping/query APIs which give more control over how things are cached. It also addresses TS issues with getting the right types in the Component without `typeof` checks.
 
 That being said you can reproduce the old pattern largely by turning off preloads at the router level and then injecting your own Context:
 
